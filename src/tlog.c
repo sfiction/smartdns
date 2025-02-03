@@ -7,6 +7,7 @@
 #define _GNU_SOURCE
 #endif
 #include "tlog.h"
+#include "stringutil.h"
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -201,8 +202,7 @@ static int _tlog_mkdir(const char *path)
         path++;
     }
 
-    strncpy(path_c, path, sizeof(path_c) - 1);
-    path_c[sizeof(path_c) - 1] = '\0';
+    strlcpy(path_c, path, sizeof(path_c));
     len = strnlen(path_c, sizeof(path_c) - 1);
     path_c[len] = '/';
     path_c[len + 1] = '\0';
@@ -671,7 +671,7 @@ int tlog_stdout_with_color(tlog_level level, const char *buff, int bufflen)
         fprintf(stdout, "%s", buff);
     }
 
-    return bufflen;    
+    return bufflen;
 }
 
 static int _tlog_early_print(struct tlog_info_inter *info_inter, const char *format, va_list ap)
@@ -891,8 +891,7 @@ static int _tlog_get_oldest_callback(const char *path, struct dirent *entry, voi
 
     if (oldestlog->mtime == 0 || oldestlog->mtime > sb.st_mtime) {
         oldestlog->mtime = sb.st_mtime;
-        strncpy(oldestlog->name, entry->d_name, sizeof(oldestlog->name));
-        oldestlog->name[sizeof(oldestlog->name) - 1] = '\0';
+        strlcpy(oldestlog->name, entry->d_name, sizeof(oldestlog->name));
         return 0;
     }
 
@@ -1205,14 +1204,10 @@ static void _tlog_get_log_name_dir(struct tlog_log *log)
     }
 
     pthread_mutex_lock(&tlog.lock);
-    strncpy(log_file, log->pending_logfile, sizeof(log_file) - 1);
-    log_file[sizeof(log_file) - 1] = '\0';
-    strncpy(log->logdir, dirname(log_file), sizeof(log->logdir) - 1);
-    log->logdir[sizeof(log->logdir) - 1] = '\0';
-    strncpy(log_file, log->pending_logfile, PATH_MAX);
-    log_file[sizeof(log_file) - 1] = '\0';
-    strncpy(log->logname, basename(log_file), sizeof(log->logname) - 1);
-    log->logname[sizeof(log->logname) - 1] = '\0';
+    strlcpy(log_file, log->pending_logfile, sizeof(log_file));
+    strlcpy(log->logdir, dirname(log_file), sizeof(log->logdir));
+    strlcpy(log_file, log->pending_logfile, sizeof(log_file));
+    strlcpy(log->logname, basename(log_file), sizeof(log->logname));
     pthread_mutex_unlock(&tlog.lock);
 }
 
@@ -1530,7 +1525,7 @@ static void _tlog_write_one_segment_log(struct tlog_log *log, char *buff, int bu
         if (segment_head->magic != TLOG_SEGMENT_MAGIC) {
             return;
         }
-        
+
         _tlog_write_output_func(log, segment_head->data, segment_head->len - 1);
         write_len += segment_head->len + sizeof(*segment_head);
         segment_head = (struct tlog_segment_head *)(buff + write_len);
