@@ -17,8 +17,8 @@
 
 ### BEGIN INIT INFO
 # Provides:        smartdns
-# Required-Start:  $network 
-# Required-Stop:   $network 
+# Required-Start:  $network
+# Required-Stop:   $network
 # Default-Start:   2 3 4 5
 # Default-Stop:
 # Short-Description: Start smartdns server
@@ -37,7 +37,7 @@ test -x $SMARTDNS || exit 5
 
 case $1 in
 	start)
-		$SMARTDNS "$SMART_DNS_OPTS" -R
+		LD_LIBRARY_PATH=/usr/local/gcc-14.2.0/lib64:$LD_LIBRARY_PATH $SMARTDNS "$SMART_DNS_OPTS" -R
 		while true; do
 			if [ -e "$PIDFILE" ]; then
 				break;
@@ -74,11 +74,12 @@ case $1 in
 		LOOP=1
 		while true; do
 			if [ ! -d "/proc/$PID" ]; then
+				rm "$PIDFILE"
 				break;
 			fi
 
 			if [ $LOOP -gt 12 ]; then
-				kill -9 "$PID"
+				kill -9 "$PID" && rm "$PIDFILE"
 				break;
 			fi
 			LOOP=$((LOOP+1))
