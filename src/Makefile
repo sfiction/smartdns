@@ -14,9 +14,10 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-BIN=smartdns 
+BIN=smartdns
 OBJS_LIB=$(patsubst %.c,%.o,$(wildcard lib/*.c))
 OBJS_MAIN=$(patsubst %.c,%.o,$(wildcard *.c))
+OBJS_HEADER=$(patsubst %.c,%.d,$(wildcard *.c))
 OBJS=$(OBJS_MAIN) $(OBJS_LIB)
 
 # cflags
@@ -26,6 +27,8 @@ ifndef CFLAGS
  else
   CFLAGS = -O2
  endif
+ CFLAGS += -Werror
+ CFLAGS += -MMD
  CFLAGS +=-Wall -Wstrict-prototypes -fno-omit-frame-pointer -Wstrict-aliasing -funwind-tables -Wmissing-prototypes -Wshadow -Wextra -Wno-unused-parameter -Wno-implicit-fallthrough
 endif
 
@@ -57,7 +60,7 @@ ifdef COMMIT_VERION
  override CFLAGS += -DCOMMIT_VERION='"$(shell git describe --tags --always --dirty)"'
 endif
 
-CXXFLAGS=-O2 -g -Wall -std=c++11 
+CXXFLAGS=-O2 -g -Wall -std=c++11
 override CXXFLAGS +=-Iinclude
 
 ifeq ($(STATIC), yes)
@@ -67,12 +70,17 @@ else
  override LDFLAGS += -lssl -lcrypto -lpthread -ldl -lm -rdynamic
 endif
 
+-include $(OBJS_HEADER)
+
 .PHONY: all clean
 
 all: $(BIN)
 
 $(BIN) : $(OBJS)
 	$(CC) $(OBJS) -o $@ $(LDFLAGS)
+
+%.o: %.c
+	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
 
 clang-tidy:
 	clang-tidy -p=. $(OBJS_MAIN:.o=.c) -- $(CFLAGS)

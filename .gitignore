@@ -1,5 +1,6 @@
 .vscode
 *.o
+*.d
 *.a
 *.pem
 .DS_Store
