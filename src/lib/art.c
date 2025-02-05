@@ -39,6 +39,11 @@ extern "C" {
     #include <emmintrin.h>
 #endif
 
+// compare the full partial (compressed inner path)
+#define BEHAVE_PESSIMISTIC 0
+// skip partial
+#define BEHAVE_OPTIMISTIC 1
+
 /**
  * Macros to manipulate pointer tags
  */
@@ -283,12 +288,13 @@ void* art_search(const art_tree *t, const unsigned char *key, int key_len) {
     art_node **child;
     art_node *n = t->root;
     int prefix_len, depth = 0;
+    int behave = BEHAVE_PESSIMISTIC;
     while (n) {
         // Might be a leaf
         if (IS_LEAF(n)) {
             n = (art_node*)LEAF_RAW(n);
             // Check if the expanded path matches
-            if (!leaf_matches((art_leaf*)n, key, key_len, depth)) {
+            if (!leaf_matches((art_leaf*)n, key, key_len, behave == BEHAVE_PESSIMISTIC ? depth : 0)) {
                 return ((art_leaf*)n)->value;
             }
             return NULL;
@@ -299,6 +305,9 @@ void* art_search(const art_tree *t, const unsigned char *key, int key_len) {
             prefix_len = check_prefix(n, key, key_len, depth);
             if (prefix_len != min(MAX_PREFIX_LEN, n->partial_len))
                 return NULL;
+            if (n->partial_len > MAX_PREFIX_LEN) {
+                behave = BEHAVE_OPTIMISTIC;
+            }
             depth = depth + n->partial_len;
         }
 
@@ -1004,80 +1013,16 @@ int art_iter_prefix(art_tree *t, const unsigned char *key, int key_len, art_call
     return 0;
 }
 
-static int str_prefix_matches(const art_leaf *n, const unsigned char *str, int str_len) {
-    // Fail if the key length is too short
+/*
+ * Similar to leaf_prefix_matches, but checks if the leaf key is a prefix of
+ * the given string.
+ */
+static int str_prefix_matches(const art_leaf *n, const unsigned char *str, int str_len, int depth) {
+    // Fail if the str length is too short
     if (n->key_len > (uint32_t)str_len) return 1;
 
     // Compare the keys
-    return memcmp(str, n->key, n->key_len);
-}
-
-static void art_copy_key(art_leaf *leaf, unsigned char *key, int *key_len)
-{
-	int len;
-
-    if (key == NULL || key_len == NULL) {
-		return;
-	}
-
-	len = (int)leaf->key_len > *key_len ? *key_len : (int)leaf->key_len;
-	memcpy(key, leaf->key, len);
-	*key_len = len;
-}
-
-void *art_substring(const art_tree *t, const unsigned char *str, int str_len, unsigned char *key, int *key_len)
-{
-    art_node **child;
-    art_node *n = t->root;
-    art_node *m;
-    art_leaf *found = NULL;
-    int prefix_len, depth = 0;
-
-    while (n) {
-        // Might be a leaf
-        if (IS_LEAF(n)) {
-            n = (art_node*)LEAF_RAW(n);
-            // Check if the expanded path matches
-            if (!str_prefix_matches((art_leaf*)n, str, str_len)) {
-                found = (art_leaf*)n;
-			}
-            break;
-        }
-
-        // Check if current is leaf
-    	child = find_child(n, 0);
-    	m = (child) ? *child : NULL;
-    	if (m && IS_LEAF(m)) {
-            m = (art_node*)LEAF_RAW(m);
-            // Check if the expanded path matches
-            if (!str_prefix_matches((art_leaf*)m, str, str_len)) {
-                found = (art_leaf*)m;
-            } else {
-                break;
-            }
-    	}
-
-        // Bail if the prefix does not match
-        if (n->partial_len) {
-            prefix_len = check_prefix(n, str, str_len, depth);
-            if (prefix_len != min(MAX_PREFIX_LEN, n->partial_len))
-                break;
-            depth = depth + n->partial_len;
-        }
-
-        // Recursively search
-        child = find_child(n, str[depth]);
-        n = (child) ? *child : NULL;
-        depth++;
-    }
-
-    if (found == NULL) {
-        return NULL;
-    }
-
-    art_copy_key(found, key, key_len);
-
-    return found->value;
+    return memcmp(str + depth, n->key + depth, n->key_len - depth);
 }
 
 void art_substring_walk(const art_tree *t, const unsigned char *str, int str_len, walk_func func, void *arg)
@@ -1088,13 +1033,14 @@ void art_substring_walk(const art_tree *t, const unsigned char *str, int str_len
     art_leaf *found = NULL;
     int prefix_len, depth = 0;
 	int stop_search = 0;
+    int behave = BEHAVE_PESSIMISTIC;
 
 	while (n && stop_search == 0) {
         // Might be a leaf
         if (IS_LEAF(n)) {
             n = (art_node*)LEAF_RAW(n);
             // Check if the expanded path matches
-            if (!str_prefix_matches((art_leaf*)n, str, str_len)) {
+            if (!str_prefix_matches((art_leaf*)n, str, str_len, behave == BEHAVE_PESSIMISTIC ? depth : 0)) {
                 found = (art_leaf*)n;
 				func(found->key, found->key_len, found->key_len != (uint32_t)str_len, found->value, arg);
 			}
@@ -1107,13 +1053,14 @@ void art_substring_walk(const art_tree *t, const unsigned char *str, int str_len
     	if (m && IS_LEAF(m)) {
             m = (art_node*)LEAF_RAW(m);
             // Check if the expanded path matches
-            if (!str_prefix_matches((art_leaf*)m, str, str_len)) {
+            if (!str_prefix_matches((art_leaf*)m, str, str_len, behave == BEHAVE_PESSIMISTIC ? depth : 0)) {
                 found = (art_leaf*)m;
                 stop_search = func(found->key, found->key_len, found->key_len != (uint32_t)str_len, found->value, arg);
                 // avoid calling this leaf again
                 if (found->key_len == (uint32_t)str_len) {
                     break;
                 }
+                behave = BEHAVE_PESSIMISTIC;
             } else {
                 break;
             }
@@ -1122,6 +1069,9 @@ void art_substring_walk(const art_tree *t, const unsigned char *str, int str_len
             prefix_len = check_prefix(n, str, str_len, depth);
             if (prefix_len != min(MAX_PREFIX_LEN, n->partial_len))
                 break;
+            if (n->partial_len > MAX_PREFIX_LEN) {
+                behave = BEHAVE_OPTIMISTIC;
+            }
         }
         // It's possible that the new_depth > str_len
         depth = depth + n->partial_len;

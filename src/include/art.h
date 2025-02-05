@@ -186,16 +186,6 @@ void* art_delete(art_tree *t, const unsigned char *key, int key_len);
 void* art_search(const art_tree *t, const unsigned char *key, int key_len);
 
 /**
- * Searches substring for a value in the ART tree
- * @arg t The tree
- * @arg str The key
- * @arg str_len The length of the key
- * @return NULL if the item was not found, otherwise
- * the value pointer is returned.
- */
-void *art_substring(const art_tree *t, const unsigned char *str, int str_len, unsigned char *key, int *key_len);
-
-/**
  * Wakk substring for a value in the ART tree
  * @arg t The tree
  * @arg str The key
