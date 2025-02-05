@@ -377,7 +377,8 @@ art_leaf* art_maximum(art_tree *t) {
 }
 
 static art_leaf* make_leaf(const unsigned char *key, int key_len, void *value) {
-    art_leaf *l = (art_leaf*)calloc(1, sizeof(art_leaf)+key_len+1);
+    int flexible_size = key_len + 1 <= 4 ? 0 : key_len + 1 - 4;
+    art_leaf *l = (art_leaf*)calloc(1, sizeof(art_leaf) + flexible_size);
     if (l == NULL) {
 		return NULL;
 	}
