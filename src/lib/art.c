@@ -362,6 +362,32 @@ static art_leaf* maximum(const art_node *n) {
     }
 }
 
+// Find any leaf to get full partial
+static art_leaf* any_leaf(const art_node *n) {
+    // Handle base cases
+    if (!n) return NULL;
+    if (IS_LEAF(n)) return LEAF_RAW(n);
+
+    int idx;
+    switch (n->type) {
+        case NODE4:
+            return any_leaf(((const art_node4*)n)->children[0]);
+        case NODE16:
+            return any_leaf(((const art_node16*)n)->children[0]);
+        case NODE48:
+            idx=0;
+            // children[c] resets to null in `remove_child48`
+            while (!((const art_node48*)n)->children[idx]) idx++;
+            return any_leaf(((const art_node48*)n)->children[idx]);
+        case NODE256:
+            idx=0;
+            while (!((const art_node256*)n)->children[idx]) idx++;
+            return any_leaf(((const art_node256*)n)->children[idx]);
+        default:
+            abort();
+    }
+}
+
 /**
  * Returns the minimum valued leaf
  */
@@ -540,9 +566,10 @@ static void add_child(art_node *n, art_node **ref, unsigned char c, void *child)
 }
 
 /**
- * Calculates the index at which the prefixes mismatch
+ * Calculates the longest common prefix of partial and key.
+ * Similar to check_prefix, but check the full partial.
  */
-static int prefix_mismatch(const art_node *n, const unsigned char *key, int key_len, int depth) {
+static int partial_match(const art_node *n, const unsigned char *key, int key_len, int depth) {
     int max_cmp = min(min(MAX_PREFIX_LEN, n->partial_len), key_len - depth);
     int idx;
     for (idx=0; idx < max_cmp; idx++) {
@@ -550,11 +577,16 @@ static int prefix_mismatch(const art_node *n, const unsigned char *key, int key_
             return idx;
     }
 
+    // If the key is fully matched we can avoid finding a leaf
+    if (depth + idx == key_len) {
+        return idx;
+    }
+
     // If the prefix is short we can avoid finding a leaf
     if (n->partial_len > MAX_PREFIX_LEN) {
         // Prefix is longer than what we've checked, find a leaf
-        art_leaf *l = minimum(n);
-        max_cmp = min(l->key_len, key_len)- depth;
+        art_leaf *l = any_leaf(n);
+        max_cmp = min(n->partial_len, key_len - depth);
         for (; idx < max_cmp; idx++) {
             if (l->key[idx+depth] != key[depth+idx])
                 return idx;
@@ -602,7 +634,7 @@ static void* recursive_insert(art_node *n, art_node **ref, const unsigned char *
     // Check if given node has a prefix
     if (n->partial_len) {
         // Determine if the prefixes differ, since we need to split
-        int prefix_diff = prefix_mismatch(n, key, key_len, depth);
+        int prefix_diff = partial_match(n, key, key_len, depth);
         if ((uint32_t)prefix_diff >= n->partial_len) {
             depth += n->partial_len;
             goto RECURSE_SEARCH;
@@ -950,12 +982,7 @@ int art_iter_prefix(art_tree *t, const unsigned char *key, int key_len, art_call
 
         // Bail if the prefix does not match
         if (n->partial_len) {
-            prefix_len = prefix_mismatch(n, key, key_len, depth);
-
-            // Guard if the mis-match is longer than the MAX_PREFIX_LEN
-            if ((uint32_t)prefix_len > n->partial_len) {
-                prefix_len = n->partial_len;
-            }
+            prefix_len = partial_match(n, key, key_len, depth);
 
             // If we've matched the prefix, iterate on this node
             if (depth + prefix_len == key_len) {
