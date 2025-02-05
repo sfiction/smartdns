@@ -1025,6 +1025,8 @@ void *art_substring(const art_tree *t, const unsigned char *str, int str_len, un
             // Check if the expanded path matches
             if (!str_prefix_matches((art_leaf*)m, str, str_len)) {
                 found = (art_leaf*)m;
+            } else {
+                break;
             }
     	}
 
@@ -1081,28 +1083,27 @@ void art_substring_walk(const art_tree *t, const unsigned char *str, int str_len
             if (!str_prefix_matches((art_leaf*)m, str, str_len)) {
                 found = (art_leaf*)m;
                 stop_search = func(found->key, found->key_len, found->key_len != (uint32_t)str_len, found->value, arg);
+                // avoid calling this leaf again
+                if (found->key_len == (uint32_t)str_len) {
+                    break;
+                }
+            } else {
+                break;
             }
-    	}
-
-        // Bail if the prefix does not match
-        if (n->partial_len) {
+            // Bail if the prefix does not match
+    	} else if (n->partial_len) {
             prefix_len = check_prefix(n, str, str_len, depth);
             if (prefix_len != min(MAX_PREFIX_LEN, n->partial_len))
                 break;
-            depth = depth + n->partial_len;
         }
+        // It's possible that the new_depth > str_len
+        depth = depth + n->partial_len;
 
         // Recursively search
         child = find_child(n, str[depth]);
         n = (child) ? *child : NULL;
         depth++;
     }
-
-    if (found == NULL) {
-        return ;
-    }
-
-    return ;
 }
 
 #ifdef __cplusplus
