@@ -320,6 +320,7 @@ struct dns_https_record_rule {
 
 struct dns_group_table {
 	DECLARE_HASHTABLE(group, 8);
+	struct dns_server_groups _[0];
 };
 extern struct dns_group_table dns_group_table;
 
@@ -364,10 +365,12 @@ struct dns_proxy_names {
 	struct hlist_node node;
 	char proxy_name[PROXY_NAME_LEN];
 	struct list_head server_list;
+	struct dns_proxy_servers* _[0];
 };
 
 struct dns_proxy_table {
 	DECLARE_HASHTABLE(proxy, 4);
+	struct dns_proxy_names _[0];
 };
 extern struct dns_proxy_table dns_proxy_table;
 
@@ -678,10 +681,6 @@ extern int dns_conf_server_num;
 
 extern char dns_conf_exist_bootstrap_dns;
 
-/* proxy servers */
-extern struct dns_proxy_servers dns_conf_proxy_servers[PROXY_MAX_SERVERS];
-extern int dns_conf_proxy_server_num;
-
 extern int dns_conf_log_level;
 extern char dns_conf_log_file[DNS_MAX_PATH];
 extern size_t dns_conf_log_size;
@@ -700,9 +699,6 @@ extern int dns_conf_cache_checkpoint_time;
 extern struct dns_domain_check_orders dns_conf_default_check_orders;
 extern int dns_conf_has_icmp_check;
 extern int dns_conf_has_tcp_check;
-
-extern struct dns_server_groups dns_conf_server_groups[DNS_NAX_GROUP_NUMBER];
-extern int dns_conf_server_group_num;
 
 extern int dns_conf_audit_enable;
 extern int dns_conf_audit_log_SOA;
@@ -745,8 +741,6 @@ void dns_server_load_exit(void);
 int dns_server_load_conf(const char *file);
 
 int dns_server_check_update_hosts(void);
-
-struct dns_proxy_names *dns_server_get_proxy_nams(const char *proxyname);
 
 struct dns_srv_records *dns_server_get_srv_record(const char *domain);
 

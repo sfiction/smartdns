@@ -523,22 +523,6 @@ static void _config_group_table_destroy(void)
 	}
 }
 
-struct dns_proxy_names *dns_server_get_proxy_nams(const char *proxyname)
-{
-	uint32_t key = 0;
-	struct dns_proxy_names *proxy = NULL;
-
-	key = hash_string(proxyname);
-	hash_for_each_possible(dns_proxy_table.proxy, proxy, node, key)
-	{
-		if (strncmp(proxy->proxy_name, proxyname, DNS_GROUP_NAME_LEN) == 0) {
-			return proxy;
-		}
-	}
-
-	return NULL;
-}
-
 static struct dns_conf_group *_config_current_rule_group(void)
 {
 	if (dns_conf_current_group_info == NULL) {
@@ -930,7 +914,7 @@ static int _config_server(int argc, char *argv[], dns_server_type_t type, int de
 #ifdef FEATURE_CHECK_EDNS
 		/* experimental feature */
 		{"check-edns", no_argument, NULL, 251},   /* check edns */
-#endif 
+#endif
 		{"whitelist-ip", no_argument, NULL, 252}, /* filtering with whitelist-ip */
 		{"blacklist-ip", no_argument, NULL, 253}, /* filtering with blacklist-ip */
 		{"set-mark", required_argument, NULL, 254}, /* set mark */
@@ -1559,7 +1543,7 @@ errout:
 		free(add_domain_rule);
 	}
 
-	tlog(TLOG_ERROR, "add domain %s rule failed", domain);
+	tlog(TLOG_ERROR, "add domain %s rule %d failed", domain, type);
 	return -1;
 }
 
@@ -1671,7 +1655,7 @@ errout:
 		free(add_domain_rule);
 	}
 
-	tlog(TLOG_ERROR, "add domain %s rule failed", domain);
+	tlog(TLOG_ERROR, "flag set domain %s rule failed", domain);
 	return 0;
 }
 
@@ -3047,13 +3031,13 @@ static int _config_bind_ip(int argc, char *argv[], DNS_BIND_TYPE type)
 	/* clang-format off */
 	static struct option long_options[] = {
 		{"group", required_argument, NULL, 'g'}, /* add to group */
-		{"no-rule-addr", no_argument, NULL, 'A'},   
-		{"no-rule-nameserver", no_argument, NULL, 'N'},   
-		{"no-rule-ipset", no_argument, NULL, 'I'},   
-		{"no-rule-sni-proxy", no_argument, NULL, 'P'},   
+		{"no-rule-addr", no_argument, NULL, 'A'},
+		{"no-rule-nameserver", no_argument, NULL, 'N'},
+		{"no-rule-ipset", no_argument, NULL, 'I'},
+		{"no-rule-sni-proxy", no_argument, NULL, 'P'},
 		{"no-rule-soa", no_argument, NULL, 'O'},
-		{"no-speed-check", no_argument, NULL, 'S'},  
-		{"no-cache", no_argument, NULL, 'C'},  
+		{"no-speed-check", no_argument, NULL, 'S'},
+		{"no-cache", no_argument, NULL, 'C'},
 		{"no-dualstack-selection", no_argument, NULL, 'D'},
 		{"no-ip-alias", no_argument, NULL, 'a'},
 		{"force-aaaa-soa", no_argument, NULL, 'F'},
@@ -3413,7 +3397,7 @@ static int _config_proxy_server(void *data, int argc, char *argv[])
 
 	/* clang-format off */
 	static struct option long_options[] = {
-		{"name", required_argument, NULL, 'n'}, 
+		{"name", required_argument, NULL, 'n'},
 		{"use-domain", no_argument, NULL, 'd'},
 		{NULL, no_argument, NULL, 0}
 	};
@@ -5630,13 +5614,13 @@ static int _config_client_rules(void *data, int argc, char *argv[])
 	/* clang-format off */
 	static struct option long_options[] = {
 		{"group", required_argument, NULL, 'g'},
-		{"no-rule-addr", no_argument, NULL, 'A'},   
-		{"no-rule-nameserver", no_argument, NULL, 'N'},   
-		{"no-rule-ipset", no_argument, NULL, 'I'},   
-		{"no-rule-sni-proxy", no_argument, NULL, 'P'},   
+		{"no-rule-addr", no_argument, NULL, 'A'},
+		{"no-rule-nameserver", no_argument, NULL, 'N'},
+		{"no-rule-ipset", no_argument, NULL, 'I'},
+		{"no-rule-sni-proxy", no_argument, NULL, 'P'},
 		{"no-rule-soa", no_argument, NULL, 'O'},
-		{"no-speed-check", no_argument, NULL, 'S'},  
-		{"no-cache", no_argument, NULL, 'C'},  
+		{"no-speed-check", no_argument, NULL, 'S'},
+		{"no-cache", no_argument, NULL, 'C'},
 		{"no-dualstack-selection", no_argument, NULL, 'D'},
 		{"no-ip-alias", no_argument, NULL, 'a'},
 		{"force-aaaa-soa", no_argument, NULL, 'F'},
