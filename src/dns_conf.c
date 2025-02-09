@@ -1475,19 +1475,18 @@ errout:
 	return -1;
 }
 
-static int _config_domain_rule_flag_set(const char *domain, unsigned int flag, unsigned int is_clear);
+static int _config_domain_rule_flag_set(const char *domain, unsigned int flag, unsigned int);
 static int _config_domain_rule_flag_callback(const char *domain, void *priv)
 {
 	struct dns_set_rule_flags_callback_args *args = (struct dns_set_rule_flags_callback_args *)priv;
 	return _config_domain_rule_flag_set(domain, args->flags, args->is_clear_flag);
 }
 
-static int _config_domain_rule_flag_set(const char *domain, unsigned int flag, unsigned int is_clear)
+static int _config_domain_rule_flag_set(const char *domain, unsigned int flag, unsigned int)
 {
 	struct dns_domain_rule *domain_rule = NULL;
 	struct dns_domain_rule *old_domain_rule = NULL;
 	struct dns_domain_rule *add_domain_rule = NULL;
-	struct dns_rule_flags *rule_flags = NULL;
 
 	char domain_key[DNS_MAX_CONF_CNAME_LEN];
 	int len = 0;
@@ -1497,7 +1496,6 @@ static int _config_domain_rule_flag_set(const char *domain, unsigned int flag, u
 	if (strncmp(domain, "domain-set:", sizeof("domain-set:") - 1) == 0) {
 		struct dns_set_rule_flags_callback_args args;
 		args.flags = flag;
-		args.is_clear_flag = is_clear;
 		return _config_domain_rule_set_each(domain + sizeof("domain-set:") - 1, _config_domain_rule_flag_callback,
 											&args);
 	}
@@ -1521,17 +1519,9 @@ static int _config_domain_rule_flag_set(const char *domain, unsigned int flag, u
 	}
 
 	/* add new rule to domain */
-	rule_flags = domain_rule_get_or_insert_flags(domain_rule);
-	if (rule_flags == NULL) {
+	if (domain_rule_set_flag(domain_rule, flag)) {
 		goto errout;
 	}
-
-	if (is_clear == false) {
-		rule_flags->flags |= flag;
-	} else {
-		rule_flags->flags &= ~flag;
-	}
-	rule_flags->is_flag_set |= flag;
 
 	/* update domain rule */
 	if (add_domain_rule) {

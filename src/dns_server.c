@@ -260,6 +260,10 @@ struct dns_request_pending_list {
 };
 
 struct dns_request_domain_rule {
+	struct _dns_rule_flags {
+		unsigned int flags;
+	} rule_flags;
+	int rule_flags_is_sub_rule;
 	struct dns_rule *rules[DOMAIN_RULE_MAX];
 	int is_sub_rule[DOMAIN_RULE_MAX];
 };
@@ -589,13 +593,22 @@ static void *_dns_server_get_dns_rule_ext(struct dns_request_domain_rule *domain
 	return domain_rule->rules[rule];
 }
 
-static int _dns_server_is_dns_rule_extract_match_ext(struct dns_request_domain_rule *domain_rule, enum domain_rule rule)
+static int _dns_server_is_domain_rule_flags_extract_match_ext(struct dns_request_domain_rule *domain_rule)
 {
-	if (rule >= DOMAIN_RULE_MAX || domain_rule == NULL) {
+	if (domain_rule == NULL) {
 		return 0;
 	}
 
-	return domain_rule->is_sub_rule[rule] == 0;
+	return domain_rule->rule_flags_is_sub_rule == 0;
+}
+
+static void *_dns_server_get_domain_rule_flags(struct dns_request *request)
+{
+	if (request == NULL) {
+		return NULL;
+	}
+
+	return &request->domain_rule.rule_flags;
 }
 
 static void *_dns_server_get_dns_rule(struct dns_request *request, enum domain_rule rule)
@@ -607,13 +620,13 @@ static void *_dns_server_get_dns_rule(struct dns_request *request, enum domain_r
 	return _dns_server_get_dns_rule_ext(&request->domain_rule, rule);
 }
 
-static int _dns_server_is_dns_rule_extract_match(struct dns_request *request, enum domain_rule rule)
+static int _dns_server_is_domain_rule_flags_extract_match(struct dns_request *request)
 {
 	if (request == NULL) {
 		return 0;
 	}
 
-	return _dns_server_is_dns_rule_extract_match_ext(&request->domain_rule, rule);
+	return _dns_server_is_domain_rule_flags_extract_match_ext(&request->domain_rule);
 }
 
 static int _dns_server_is_dns64_request(struct dns_request *request)
@@ -635,7 +648,7 @@ static int _dns_server_is_dns64_request(struct dns_request *request)
 
 static void _dns_server_set_dualstack_selection(struct dns_request *request)
 {
-	struct dns_rule_flags *rule_flag = NULL;
+	struct _dns_rule_flags *rule_flag = NULL;
 
 	if (request->dualstack_selection_query || is_ipv6_ready == 0) {
 		request->dualstack_selection = 0;
@@ -648,14 +661,14 @@ static void _dns_server_set_dualstack_selection(struct dns_request *request)
 		return;
 	}
 
-	rule_flag = _dns_server_get_dns_rule(request, DOMAIN_RULE_FLAGS);
+	rule_flag = _dns_server_get_domain_rule_flags(request);
 	if (rule_flag) {
 		if (rule_flag->flags & DOMAIN_FLAG_DUALSTACK_SELECT) {
 			request->dualstack_selection = 1;
 			return;
 		}
 
-		if (rule_flag->is_flag_set & DOMAIN_FLAG_DUALSTACK_SELECT) {
+		if (rule_flag->flags & DOMAIN_FLAG_NO_DUALSTACK_SELECT) {
 			request->dualstack_selection = 0;
 			return;
 		}
@@ -671,7 +684,7 @@ static void _dns_server_set_dualstack_selection(struct dns_request *request)
 
 static int _dns_server_is_return_soa_qtype(struct dns_request *request, dns_type_t qtype)
 {
-	struct dns_rule_flags *rule_flag = NULL;
+	struct _dns_rule_flags *rule_flag = NULL;
 	unsigned int flags = 0;
 
 	if (_dns_server_has_bind_flag(request, BIND_FLAG_NO_RULE_SOA) == 0) {
@@ -683,7 +696,7 @@ static int _dns_server_is_return_soa_qtype(struct dns_request *request, dns_type
 		return 0;
 	}
 
-	rule_flag = _dns_server_get_dns_rule(request, DOMAIN_RULE_FLAGS);
+	rule_flag = _dns_server_get_domain_rule_flags(request);
 	if (rule_flag) {
 		flags = rule_flag->flags;
 		if (flags & DOMAIN_FLAG_ADDR_SOA) {
@@ -2073,7 +2086,7 @@ static int _dns_server_setup_ipset_nftset_packet(struct dns_server_post_context 
 	struct dns_ipset_rule *ipset_rule_v6 = NULL;
 	struct dns_nftset_rule *nftset_ip = NULL;
 	struct dns_nftset_rule *nftset_ip6 = NULL;
-	struct dns_rule_flags *rule_flags = NULL;
+	struct _dns_rule_flags *rule_flags = NULL;
 	int check_no_speed_rule = 0;
 
 	if (_dns_server_has_bind_flag(request, BIND_FLAG_NO_RULE_IPSET) == 0) {
@@ -2095,7 +2108,7 @@ static int _dns_server_setup_ipset_nftset_packet(struct dns_server_post_context 
 	conf = request->conf;
 
 	/* check ipset rule */
-	rule_flags = _dns_server_get_dns_rule(request, DOMAIN_RULE_FLAGS);
+	rule_flags = _dns_server_get_domain_rule_flags(request);
 	if (!rule_flags || (rule_flags->flags & DOMAIN_FLAG_IPSET_IGN) == 0) {
 		ipset_rule = _dns_server_get_dns_rule(request, DOMAIN_RULE_IPSET);
 		if (ipset_rule == NULL) {
@@ -5276,7 +5289,7 @@ static void _dns_server_log_rule(const char *domain, enum domain_rule rule_type,
 
 static void _dns_server_update_rule_by_flags(struct dns_request_domain_rule *request_domain_rule)
 {
-	struct dns_rule_flags *rule_flag = (struct dns_rule_flags *)request_domain_rule->rules[0];
+	struct _dns_rule_flags *rule_flag = &request_domain_rule->rule_flags;
 	unsigned int flags = 0;
 
 	if (rule_flag == NULL) {
@@ -5359,6 +5372,8 @@ static int _dns_server_get_rules(unsigned char *key, uint32_t key_len, int is_su
 		i = 0;
 	}
 
+	domain_rule_get_flags(domain_rule, &request_domain_rule->rule_flags.flags);
+	request_domain_rule->rule_flags_is_sub_rule = is_subkey;
 	for (; i < DOMAIN_RULE_MAX; i++) {
 		rule = domain_rule_get(domain_rule, i);
 		if (rule == NULL) {
@@ -5500,12 +5515,12 @@ static int _dns_server_pre_process_server_flags(struct dns_request *request)
 
 static int _dns_server_pre_process_rule_flags(struct dns_request *request)
 {
-	struct dns_rule_flags *rule_flag = NULL;
+	struct _dns_rule_flags *rule_flag = NULL;
 	unsigned int flags = 0;
 	int rcode = DNS_RC_NOERROR;
 
 	/* get domain rule flag */
-	rule_flag = _dns_server_get_dns_rule(request, DOMAIN_RULE_FLAGS);
+	rule_flag = _dns_server_get_domain_rule_flags(request);
 	if (rule_flag != NULL) {
 		flags = rule_flag->flags;
 	}
@@ -5854,7 +5869,7 @@ static DNS_CHILD_POST_RESULT _dns_server_process_cname_callback(struct dns_reque
 static int _dns_server_process_cname_pre(struct dns_request *request)
 {
 	struct dns_cname_rule *cname = NULL;
-	struct dns_rule_flags *rule_flag = NULL;
+	struct _dns_rule_flags *rule_flag = NULL;
 	struct dns_request_domain_rule domain_rule;
 
 	if (_dns_server_has_bind_flag(request, BIND_FLAG_NO_RULE_CNAME) == 0) {
@@ -5866,7 +5881,7 @@ static int _dns_server_process_cname_pre(struct dns_request *request)
 	}
 
 	/* get domain rule flag */
-	rule_flag = _dns_server_get_dns_rule(request, DOMAIN_RULE_FLAGS);
+	rule_flag = _dns_server_get_domain_rule_flags(request);
 	if (rule_flag != NULL) {
 		if (rule_flag->flags & DOMAIN_FLAG_CNAME_IGN) {
 			return 0;
@@ -5898,7 +5913,7 @@ static int _dns_server_process_cname(struct dns_request *request)
 	struct dns_cname_rule *cname = NULL;
 	const char *child_group_name = NULL;
 	int ret = 0;
-	struct dns_rule_flags *rule_flag = NULL;
+	struct _dns_rule_flags *rule_flag = NULL;
 
 	if (_dns_server_has_bind_flag(request, BIND_FLAG_NO_RULE_CNAME) == 0) {
 		return 0;
@@ -5909,7 +5924,7 @@ static int _dns_server_process_cname(struct dns_request *request)
 	}
 
 	/* get domain rule flag */
-	rule_flag = _dns_server_get_dns_rule(request, DOMAIN_RULE_FLAGS);
+	rule_flag = _dns_server_get_domain_rule_flags(request);
 	if (rule_flag != NULL) {
 		if (rule_flag->flags & DOMAIN_FLAG_CNAME_IGN) {
 			return 0;
@@ -6523,16 +6538,16 @@ static void _dns_server_request_set_callback(struct dns_request *request, dns_re
 
 static int _dns_server_process_smartdns_domain(struct dns_request *request)
 {
-	struct dns_rule_flags *rule_flag = NULL;
+	struct _dns_rule_flags *rule_flag = NULL;
 	unsigned int flags = 0;
 
 	/* get domain rule flag */
-	rule_flag = _dns_server_get_dns_rule(request, DOMAIN_RULE_FLAGS);
+	rule_flag = _dns_server_get_domain_rule_flags(request);
 	if (rule_flag == NULL) {
 		return -1;
 	}
 
-	if (_dns_server_is_dns_rule_extract_match(request, DOMAIN_RULE_FLAGS) == 0) {
+	if (_dns_server_is_domain_rule_flags_extract_match(request) == 0) {
 		return -1;
 	}
 

@@ -29,9 +29,6 @@ void *_new_dns_rule_ext(enum domain_rule domain_rule, int ext_size)
 	int size = 0;
 
 	switch (domain_rule) {
-	case DOMAIN_RULE_FLAGS:
-		size = sizeof(struct dns_rule_flags);
-		break;
 	case DOMAIN_RULE_ADDRESS_IPV4:
 		size = sizeof(struct dns_rule_address_IPV4);
 		break;
@@ -113,7 +110,8 @@ struct dns_domain_rule {
 
 	unsigned char layout_type : 2;
 	uint8_t capacity;
-	uint32_t bitmap;
+	uint16_t bitmap;
+	uint32_t flags;
 	union {
 		struct dns_rule *arr[INNER_ARRAY_SIZE];
 		struct dns_rule **ptr;
@@ -254,25 +252,30 @@ int domain_rule_set_data(struct dns_domain_rule *domain_rule, int sub_rule_only,
 	return 0;
 }
 
-struct dns_rule_flags *domain_rule_get_or_insert_flags(struct dns_domain_rule *domain_rule)
+int domain_rule_get_flags(struct dns_domain_rule *domain_rule, unsigned int *flags)
 {
-	struct dns_rule **ptr_rule;
-	struct dns_rule_flags *rule_flags;
-
-	ptr_rule = _domain_rule_access(domain_rule, DOMAIN_RULE_FLAGS, 1);
-	if (ptr_rule == NULL) {
-		return NULL;
+	if (domain_rule == NULL) {
+		return -1;
 	}
 
-	rule_flags = _new_dns_rule(DOMAIN_RULE_FLAGS);
-	if (rule_flags == NULL) {
-		return NULL;
+	*flags = domain_rule->flags;
+	return 0;
+}
+
+int domain_rule_set_flag(struct dns_domain_rule *domain_rule, unsigned int flag)
+{
+	if (domain_rule == NULL) {
+		return -1;
 	}
 
-	*ptr_rule = (struct dns_rule *)rule_flags;
-	rule_flags->flags = 0;
+	domain_rule->flags |= flag;
+	if (flag & DOMAIN_FLAG_DUALSTACK_SELECT) {
+		domain_rule->flags &= ~DOMAIN_FLAG_NO_DUALSTACK_SELECT;
+	} else if (flag & DOMAIN_FLAG_NO_DUALSTACK_SELECT) {
+		domain_rule->flags &= ~DOMAIN_FLAG_DUALSTACK_SELECT;
+	}
 
-	return rule_flags;
+	return 0;
 }
 
 struct dns_rule *domain_rule_get(struct dns_domain_rule *domain_rule, enum domain_rule type)
@@ -291,7 +294,7 @@ int domain_rule_set(struct dns_domain_rule *domain_rule, enum domain_rule type, 
 {
 	struct dns_rule **ptr_rule;
 
-	if (domain_rule == NULL || type == DOMAIN_RULE_FLAGS) {
+	if (domain_rule == NULL) {
 		return -1;
 	}
 

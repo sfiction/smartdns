@@ -34,19 +34,25 @@ TEST_F(DomainRules, order)
 	ASSERT_NE(domain_rule, nullptr);
 
 	std::map<int, struct dns_rule *> rules;
+	domain_rule_set_flag(domain_rule, DOMAIN_FLAG_ADDR_SOA);
 	for (int i = 0; i < DOMAIN_RULE_MAX; ++i) {
 		struct dns_rule *rule = (struct dns_rule *)_new_dns_rule((enum domain_rule)i);
 		EXPECT_NE(rule, nullptr);
 		rules[i] = rule;
-		EXPECT_EQ(domain_rule_set(domain_rule, (enum domain_rule)i, rule), i == DOMAIN_RULE_FLAGS ? -1 : 0);
+		EXPECT_EQ(domain_rule_set(domain_rule, (enum domain_rule)i, rule), 0);
 	}
 
-	EXPECT_EQ(domain_rule_get(domain_rule, DOMAIN_RULE_FLAGS), nullptr);
+	unsigned int flags;
+	EXPECT_EQ(domain_rule_get_flags(domain_rule, &flags), 0);
+	EXPECT_EQ(flags, DOMAIN_FLAG_ADDR_SOA);
 	for (int i = 1; i < DOMAIN_RULE_MAX; ++i) {
 		EXPECT_EQ(domain_rule_get(domain_rule, (enum domain_rule)i), rules[i]);
 	}
 
-	struct dns_rule_flags *rule_flags = domain_rule_get_or_insert_flags(domain_rule);
-	EXPECT_NE(rule_flags, nullptr);
-	EXPECT_EQ(rule_flags->flags, 0);
+	domain_rule_set_flag(domain_rule, DOMAIN_FLAG_DUALSTACK_SELECT);
+	EXPECT_EQ(domain_rule_get_flags(domain_rule, &flags), 0);
+	EXPECT_EQ(flags, DOMAIN_FLAG_ADDR_SOA | DOMAIN_FLAG_DUALSTACK_SELECT);
+	domain_rule_set_flag(domain_rule, DOMAIN_FLAG_NO_DUALSTACK_SELECT);
+	EXPECT_EQ(domain_rule_get_flags(domain_rule, &flags), 0);
+	EXPECT_EQ(flags, DOMAIN_FLAG_ADDR_SOA | DOMAIN_FLAG_NO_DUALSTACK_SELECT);
 }

@@ -30,8 +30,7 @@ extern "C" {
 #endif
 
 enum domain_rule {
-	DOMAIN_RULE_FLAGS = 0,
-	DOMAIN_RULE_ADDRESS_IPV4,
+	DOMAIN_RULE_ADDRESS_IPV4 = 0,
 	DOMAIN_RULE_ADDRESS_IPV6,
 	DOMAIN_RULE_IPSET,
 	DOMAIN_RULE_IPSET_IPV4,
@@ -76,12 +75,7 @@ struct dns_rule {
 #define DOMAIN_FLAG_ENABLE_CACHE (1 << 20)
 #define DOMAIN_FLAG_ADDR_HTTPS_SOA (1 << 21)
 #define DOMAIN_FLAG_ADDR_HTTPS_IGN (1 << 22)
-
-struct dns_rule_flags {
-	struct dns_rule head;
-	unsigned int flags;
-	unsigned int is_flag_set;
-};
+#define DOMAIN_FLAG_NO_DUALSTACK_SELECT (1 << 23)
 
 struct dns_rule_address_IPV4 {
 	struct dns_rule head;
@@ -192,10 +186,8 @@ int domain_rule_free(struct dns_domain_rule *domain_rule);
 // ensures users can't directly modify `struct dns_domain_rule`
 int domain_rule_get_data(struct dns_domain_rule *domain_rule, int *sub_rule_only, int *root_rule_only);
 int domain_rule_set_data(struct dns_domain_rule *domain_rule, int sub_rule_only, int root_rule_only);
-/**
- * Get flags rule with essentially allocation.
- */
-struct dns_rule_flags *domain_rule_get_or_insert_flags(struct dns_domain_rule *domain_rule);
+int domain_rule_get_flags(struct dns_domain_rule *domain_rule, unsigned int *flags);
+int domain_rule_set_flag(struct dns_domain_rule *domain_rule, unsigned int flag);
 /**
  * Get rule without allocation.
  */
