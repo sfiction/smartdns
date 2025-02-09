@@ -118,14 +118,25 @@ struct dns_domain_rule {
 	} rules;
 };
 
+struct dns_domain_rule *domain_rules;
+static uint32_t buffer_index;
+
+#define PAGE_SIZE ((1 << 22) - (1 << 5))
+#define PAGE_NUM (PAGE_SIZE / sizeof(struct dns_domain_rule))
+
 struct dns_domain_rule *domain_rule_new(uint8_t)
 {
 	struct dns_domain_rule *domain_rule;
 
-	domain_rule = calloc(1, sizeof(struct dns_domain_rule));
-	if (domain_rule == NULL) {
-		return NULL;
+	if (domain_rules == NULL || buffer_index >= PAGE_NUM) {
+		domain_rules = malloc(PAGE_SIZE);
+		if (domain_rules == NULL) {
+			return NULL;
+		}
+		buffer_index = 0;
 	}
+
+	domain_rule = &domain_rules[buffer_index++];
 
 	domain_rule->layout_type = DOMAIN_RULE_LAYOUT_ARRAY;
 	domain_rule->capacity = INNER_ARRAY_SIZE;
@@ -224,7 +235,6 @@ int domain_rule_free(struct dns_domain_rule *domain_rule)
 		free(rules);
 	}
 
-	free(domain_rule);
 	return 0;
 }
 
