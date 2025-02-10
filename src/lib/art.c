@@ -295,7 +295,7 @@ void* art_search(const art_tree *t, const unsigned char *key, int key_len) {
             n = (art_node*)LEAF_RAW(n);
             // Check if the expanded path matches
             if (!leaf_matches((art_leaf*)n, key, key_len, behave == BEHAVE_PESSIMISTIC ? depth : 0)) {
-                return ((art_leaf*)n)->value;
+                return (void *)&((art_leaf*)n)->value;
             }
             return NULL;
         }

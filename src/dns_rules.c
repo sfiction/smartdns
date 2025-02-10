@@ -97,6 +97,15 @@ void _dns_rule_put(struct dns_rule *rule)
 	}
 }
 
+#define IS_RAW(x) ((uintptr_t)(x->ptr) & 1)
+
+struct raw_domain_rule {
+	uint32_t lowest : 1;
+	uint32_t sub_rule_only : 1;
+	uint32_t root_rule_only : 1;
+	uint32_t flags : 29;
+};
+
 enum layout_type {
 	DOMAIN_RULE_LAYOUT_ARRAY = 1,
 	DOMAIN_RULE_LAYOUT_POINTER = 2,
@@ -104,7 +113,7 @@ enum layout_type {
 
 #define INNER_ARRAY_SIZE 1
 
-struct dns_domain_rule {
+struct _domain_rule {
 	unsigned char sub_rule_only : 1;
 	unsigned char root_rule_only : 1;
 
@@ -118,15 +127,31 @@ struct dns_domain_rule {
 	} rules;
 };
 
-struct dns_domain_rule *domain_rules;
+struct _domain_rule *domain_rules;
 static uint32_t buffer_index;
 
 #define PAGE_SIZE ((1 << 22) - (1 << 5))
-#define PAGE_NUM (PAGE_SIZE / sizeof(struct dns_domain_rule))
+#define PAGE_NUM (PAGE_SIZE / sizeof(struct _domain_rule))
 
-struct dns_domain_rule *domain_rule_new(uint8_t)
+int domain_rule_init(struct dns_domain_rule *wrapper)
 {
-	struct dns_domain_rule *domain_rule;
+	struct raw_domain_rule *raw = (struct raw_domain_rule *)wrapper;
+
+	if (wrapper == NULL) {
+		return -1;
+	}
+
+	raw->lowest = 1;
+	raw->sub_rule_only = 0;
+	raw->root_rule_only = 0;
+	raw->flags = 0;
+
+	return 0;
+}
+
+static struct _domain_rule *_domain_rule_new(uint8_t)
+{
+	struct _domain_rule *domain_rule;
 
 	if (domain_rules == NULL || buffer_index >= PAGE_NUM) {
 		domain_rules = malloc(PAGE_SIZE);
@@ -145,8 +170,15 @@ struct dns_domain_rule *domain_rule_new(uint8_t)
 	return domain_rule;
 }
 
-static struct dns_rule **_domain_rule_rules(struct dns_domain_rule *domain_rule)
+static struct dns_rule **_domain_rule_rules(struct dns_domain_rule *wrapper)
 {
+	struct _domain_rule *domain_rule;
+
+	if (wrapper == NULL || IS_RAW(wrapper)) {
+		return NULL;
+	}
+
+	domain_rule = wrapper->ptr;
 	if (domain_rule == NULL) {
 		return NULL;
 	}
@@ -162,14 +194,20 @@ static struct dns_rule **_domain_rule_rules(struct dns_domain_rule *domain_rule)
 	}
 }
 
-static struct dns_rule **_domain_rule_access(struct dns_domain_rule *domain_rule, enum domain_rule type, int insert)
+static struct dns_rule **_domain_rule_access(struct dns_domain_rule *wrapper, enum domain_rule type, int insert)
 {
-	struct dns_rule **rules = _domain_rule_rules(domain_rule);
+	struct dns_rule **rules = _domain_rule_rules(wrapper);
+	struct _domain_rule *domain_rule;
 	int i, size;
 	int new_capacity;
 	struct dns_rule **new_rules;
 
 	if (rules == NULL || type < 0 || type >= DOMAIN_RULE_MAX) {
+		return NULL;
+	}
+
+	domain_rule = wrapper->ptr;
+	if (domain_rule == NULL) {
 		return NULL;
 	}
 
@@ -212,10 +250,17 @@ static struct dns_rule **_domain_rule_access(struct dns_domain_rule *domain_rule
 	}
 }
 
-int domain_rule_free(struct dns_domain_rule *domain_rule)
+int domain_rule_free(struct dns_domain_rule *wrapper)
 {
-	struct dns_rule **rules = _domain_rule_rules(domain_rule);
+	struct dns_rule **rules = _domain_rule_rules(wrapper);
+	struct _domain_rule *domain_rule;
 	int type, i;
+
+	if (IS_RAW(wrapper)) {
+		return 0;
+	}
+
+	domain_rule = wrapper->ptr;
 
 	if (rules != NULL) {
 		for (type = 0, i = 0; type < DOMAIN_RULE_MAX; ++type) {
@@ -238,8 +283,21 @@ int domain_rule_free(struct dns_domain_rule *domain_rule)
 	return 0;
 }
 
-int domain_rule_get_data(struct dns_domain_rule *domain_rule, int *sub_rule_only, int *root_rule_only)
+int domain_rule_get_data(struct dns_domain_rule *wrapper, int *sub_rule_only, int *root_rule_only)
 {
+	struct _domain_rule *domain_rule;
+
+	if (wrapper == NULL) {
+		return -1;
+	}
+
+	if (IS_RAW(wrapper)) {
+		*sub_rule_only = ((struct raw_domain_rule *)wrapper)->sub_rule_only;
+		*root_rule_only = ((struct raw_domain_rule *)wrapper)->root_rule_only;
+		return 0;
+	}
+
+	domain_rule = wrapper->ptr;
 	if (domain_rule == NULL) {
 		return -1;
 	}
@@ -250,8 +308,21 @@ int domain_rule_get_data(struct dns_domain_rule *domain_rule, int *sub_rule_only
 	return 0;
 }
 
-int domain_rule_set_data(struct dns_domain_rule *domain_rule, int sub_rule_only, int root_rule_only)
+int domain_rule_set_data(struct dns_domain_rule *wrapper, int sub_rule_only, int root_rule_only)
 {
+	struct _domain_rule *domain_rule;
+
+	if (wrapper == NULL) {
+		return -1;
+	}
+
+	if (IS_RAW(wrapper)) {
+		((struct raw_domain_rule *)wrapper)->sub_rule_only = sub_rule_only;
+		((struct raw_domain_rule *)wrapper)->root_rule_only = root_rule_only;
+		return 0;
+	}
+
+	domain_rule = wrapper->ptr;
 	if (domain_rule == NULL) {
 		return -1;
 	}
@@ -262,8 +333,20 @@ int domain_rule_set_data(struct dns_domain_rule *domain_rule, int sub_rule_only,
 	return 0;
 }
 
-int domain_rule_get_flags(struct dns_domain_rule *domain_rule, unsigned int *flags)
+int domain_rule_get_flags(struct dns_domain_rule *wrapper, unsigned int *flags)
 {
+	struct _domain_rule *domain_rule;
+
+	if (wrapper == NULL) {
+		return -1;
+	}
+
+	if (IS_RAW(wrapper)) {
+		*flags = ((struct raw_domain_rule *)wrapper)->flags;
+		return 0;
+	}
+
+	domain_rule = wrapper->ptr;
 	if (domain_rule == NULL) {
 		return -1;
 	}
@@ -272,27 +355,51 @@ int domain_rule_get_flags(struct dns_domain_rule *domain_rule, unsigned int *fla
 	return 0;
 }
 
-int domain_rule_set_flag(struct dns_domain_rule *domain_rule, unsigned int flag)
+int domain_rule_set_flag(struct dns_domain_rule *wrapper, unsigned int flag)
 {
-	if (domain_rule == NULL) {
+	struct _domain_rule *domain_rule;
+	uint32_t flags;
+
+	if (wrapper == NULL) {
 		return -1;
 	}
 
-	domain_rule->flags |= flag;
+	if (domain_rule_get_flags(wrapper, &flags)) {
+		return -1;
+	}
+
+	flags |= flag;
 	if (flag & DOMAIN_FLAG_DUALSTACK_SELECT) {
-		domain_rule->flags &= ~DOMAIN_FLAG_NO_DUALSTACK_SELECT;
+		flags &= ~DOMAIN_FLAG_NO_DUALSTACK_SELECT;
 	} else if (flag & DOMAIN_FLAG_NO_DUALSTACK_SELECT) {
-		domain_rule->flags &= ~DOMAIN_FLAG_DUALSTACK_SELECT;
+		flags &= ~DOMAIN_FLAG_DUALSTACK_SELECT;
+	}
+
+	if (IS_RAW(wrapper)) {
+		((struct raw_domain_rule *)wrapper)->flags = flags;
+	} else {
+		domain_rule = wrapper->ptr;
+		domain_rule->flags = flags;
 	}
 
 	return 0;
 }
 
-struct dns_rule *domain_rule_get(struct dns_domain_rule *domain_rule, enum domain_rule type)
+struct dns_rule *domain_rule_get(struct dns_domain_rule *wrapper, enum domain_rule type)
 {
+	struct _domain_rule *domain_rule;
 	struct dns_rule **ptr_rule;
 
-	ptr_rule = _domain_rule_access(domain_rule, type, 0);
+	if (wrapper == NULL || IS_RAW(wrapper)) {
+		return NULL;
+	}
+
+	domain_rule = wrapper->ptr;
+	if (domain_rule == NULL) {
+		return NULL;
+	}
+
+	ptr_rule = _domain_rule_access(wrapper, type, 0);
 	if (ptr_rule == NULL) {
 		return NULL;
 	}
@@ -300,15 +407,31 @@ struct dns_rule *domain_rule_get(struct dns_domain_rule *domain_rule, enum domai
 	return *ptr_rule;
 }
 
-int domain_rule_set(struct dns_domain_rule *domain_rule, enum domain_rule type, struct dns_rule *rule)
+int domain_rule_set(struct dns_domain_rule *wrapper, enum domain_rule type, struct dns_rule *rule)
 {
+	struct _domain_rule *domain_rule;
+	struct raw_domain_rule *raw;
 	struct dns_rule **ptr_rule;
 
+	if (wrapper == NULL) {
+		return -1;
+	}
+
+	if (IS_RAW(wrapper)) {
+		domain_rule = _domain_rule_new(1);
+		raw = (struct raw_domain_rule *)wrapper;
+		domain_rule->sub_rule_only = raw->sub_rule_only;
+		domain_rule->root_rule_only = raw->root_rule_only;
+		domain_rule->flags = raw->flags;
+		wrapper->ptr = domain_rule;
+	}
+
+	domain_rule = wrapper->ptr;
 	if (domain_rule == NULL) {
 		return -1;
 	}
 
-	ptr_rule = _domain_rule_access(domain_rule, type, 1);
+	ptr_rule = _domain_rule_access(wrapper, type, 1);
 	if (ptr_rule == NULL) {
 		return -1;
 	}

@@ -30,7 +30,9 @@ class DomainRules : public ::testing::Test
 
 TEST_F(DomainRules, order)
 {
-	struct dns_domain_rule *domain_rule = domain_rule_new(1);
+	struct dns_domain_rule _domain_rule;
+	struct dns_domain_rule *domain_rule = &_domain_rule;
+	domain_rule_init(domain_rule);
 	ASSERT_NE(domain_rule, nullptr);
 
 	std::map<int, struct dns_rule *> rules;
@@ -55,4 +57,5 @@ TEST_F(DomainRules, order)
 	domain_rule_set_flag(domain_rule, DOMAIN_FLAG_NO_DUALSTACK_SELECT);
 	EXPECT_EQ(domain_rule_get_flags(domain_rule, &flags), 0);
 	EXPECT_EQ(flags, DOMAIN_FLAG_ADDR_SOA | DOMAIN_FLAG_NO_DUALSTACK_SELECT);
+	EXPECT_EQ(domain_rule_free(domain_rule), 0);
 }

@@ -181,7 +181,6 @@ static int _conf_ptr_add(const char *hostname, const char *ip, int is_dynamic);
 static int _conf_client_subnet(char *subnet, struct dns_edns_client_subnet *ipv4_ecs,
 							   struct dns_edns_client_subnet *ipv6_ecs);
 static int _conf_domain_rule_address(char *domain, const char *domain_address);
-static struct dns_domain_rule *_config_domain_rule_get(const char *domain);
 typedef int (*set_rule_add_func)(const char *value, void *priv);
 static int _config_ip_rule_set_each(const char *ip_set, set_rule_add_func callback, void *priv);
 static struct dns_conf_group *_config_rule_group_get(const char *group_name);
@@ -1205,6 +1204,7 @@ static void _config_rule_group_remove(struct dns_conf_group *rule_group)
 
 static void _config_rule_group_destroy(void)
 {
+	return;
 	struct dns_conf_group *group;
 	struct hlist_node *tmp = NULL;
 	unsigned long i = 0;
@@ -1364,23 +1364,11 @@ static int _config_setup_domain_key(const char *domain, char *domain_key, int do
 	return 0;
 }
 
-static __attribute__((unused)) struct dns_domain_rule *_config_domain_rule_get(const char *domain)
-{
-	char domain_key[DNS_MAX_CONF_CNAME_LEN];
-	int len = 0;
-
-	if (_config_setup_domain_key(domain, domain_key, sizeof(domain_key), &len, NULL, NULL) != 0) {
-		return NULL;
-	}
-
-	return art_search(&_config_current_rule_group()->domain_rule.tree, (unsigned char *)domain_key, len);
-}
-
 static int _config_domain_rule_add(const char *domain, enum domain_rule type, void *rule)
 {
 	struct dns_domain_rule *domain_rule = NULL;
-	struct dns_domain_rule *old_domain_rule = NULL;
-	struct dns_domain_rule *add_domain_rule = NULL;
+	struct dns_domain_rule add_domain_rule;
+	int need_insert = 0;
 
 	char domain_key[DNS_MAX_CONF_CNAME_LEN];
 	int len = 0;
@@ -1405,13 +1393,12 @@ static int _config_domain_rule_add(const char *domain, enum domain_rule type, vo
 	}
 
 	/* Get existing or create domain rule */
-	domain_rule = art_search(&_config_current_rule_group()->domain_rule.tree, (unsigned char *)domain_key, len);
+	domain_rule = (struct dns_domain_rule *)art_search(&_config_current_rule_group()->domain_rule.tree,
+													   (unsigned char *)domain_key, len);
 	if (domain_rule == NULL) {
-		add_domain_rule = domain_rule_new(1);
-		if (add_domain_rule == NULL) {
-			goto errout;
-		}
-		domain_rule = add_domain_rule;
+		domain_rule_init(&add_domain_rule);
+		domain_rule = &add_domain_rule;
+		need_insert = 1;
 	}
 
 	if (domain_rule_set_data(domain_rule, sub_rule_only, root_rule_only)) {
@@ -1424,18 +1411,14 @@ static int _config_domain_rule_add(const char *domain, enum domain_rule type, vo
 	}
 
 	/* update domain rule */
-	if (add_domain_rule) {
-		old_domain_rule = art_insert(&_config_current_rule_group()->domain_rule.tree, (unsigned char *)domain_key, len,
-									 add_domain_rule);
-		if (old_domain_rule) {
-			domain_rule_free(old_domain_rule);
-		}
+	if (need_insert) {
+		art_insert(&_config_current_rule_group()->domain_rule.tree, (unsigned char *)domain_key, len, domain_rule->ptr);
 	}
 
 	return 0;
 errout:
-	if (add_domain_rule) {
-		domain_rule_free(add_domain_rule);
+	if (need_insert) {
+		domain_rule_free(domain_rule);
 	}
 
 	tlog(TLOG_ERROR, "add domain %s rule %d failed", domain, type);
@@ -1466,7 +1449,7 @@ static int _config_domain_rule_delete(const char *domain)
 	/* delete existing rules */
 	void *rule = art_delete(&_config_current_rule_group()->domain_rule.tree, (unsigned char *)domain_key, len);
 	if (rule) {
-		domain_rule_free(rule);
+		domain_rule_free((void *)&rule);
 	}
 
 	return 0;
@@ -1485,8 +1468,8 @@ static int _config_domain_rule_flag_callback(const char *domain, void *priv)
 static int _config_domain_rule_flag_set(const char *domain, unsigned int flag, unsigned int)
 {
 	struct dns_domain_rule *domain_rule = NULL;
-	struct dns_domain_rule *old_domain_rule = NULL;
-	struct dns_domain_rule *add_domain_rule = NULL;
+	struct dns_domain_rule add_domain_rule;
+	int need_insert = 0;
 
 	char domain_key[DNS_MAX_CONF_CNAME_LEN];
 	int len = 0;
@@ -1505,13 +1488,12 @@ static int _config_domain_rule_flag_set(const char *domain, unsigned int flag, u
 	}
 
 	/* Get existing or create domain rule */
-	domain_rule = art_search(&_config_current_rule_group()->domain_rule.tree, (unsigned char *)domain_key, len);
+	domain_rule = (struct dns_domain_rule *)art_search(&_config_current_rule_group()->domain_rule.tree,
+													   (unsigned char *)domain_key, len);
 	if (domain_rule == NULL) {
-		add_domain_rule = domain_rule_new(1);
-		if (add_domain_rule == NULL) {
-			goto errout;
-		}
-		domain_rule = add_domain_rule;
+		domain_rule_init(&add_domain_rule);
+		domain_rule = &add_domain_rule;
+		need_insert = 1;
 	}
 
 	if (domain_rule_set_data(domain_rule, sub_rule_only, root_rule_only)) {
@@ -1524,18 +1506,14 @@ static int _config_domain_rule_flag_set(const char *domain, unsigned int flag, u
 	}
 
 	/* update domain rule */
-	if (add_domain_rule) {
-		old_domain_rule = art_insert(&_config_current_rule_group()->domain_rule.tree, (unsigned char *)domain_key, len,
-									 add_domain_rule);
-		if (old_domain_rule) {
-			domain_rule_free(old_domain_rule);
-		}
+	if (need_insert) {
+		art_insert(&_config_current_rule_group()->domain_rule.tree, (unsigned char *)domain_key, len, domain_rule->ptr);
 	}
 
 	return 0;
 errout:
-	if (add_domain_rule) {
-		domain_rule_free(add_domain_rule);
+	if (need_insert) {
+		domain_rule_free(domain_rule);
 	}
 
 	tlog(TLOG_ERROR, "flag set domain %s rule failed", domain);

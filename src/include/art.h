@@ -181,7 +181,7 @@ void* art_delete(art_tree *t, const unsigned char *key, int key_len);
  * @arg key The key
  * @arg key_len The length of the key
  * @return NULL if the item was not found, otherwise
- * the value pointer is returned.
+ * the pointer to value is returned.
  */
 void* art_search(const art_tree *t, const unsigned char *key, int key_len);
 

@@ -5343,15 +5343,17 @@ static int _dns_server_get_rules(unsigned char *key, uint32_t key_len, int is_su
 {
 	struct rule_walk_args *walk_args = arg;
 	struct dns_request_domain_rule *request_domain_rule = walk_args->args;
-	struct dns_domain_rule *domain_rule = value;
+	struct dns_domain_rule _domain_rule;
+	struct dns_domain_rule *domain_rule = &_domain_rule;
 	struct dns_rule *rule;
 	int sub_rule_only = 0;
 	int root_rule_only = 0;
 	int i = 0;
-	if (domain_rule == NULL) {
+	if (value == NULL) {
 		return 0;
 	}
 
+	domain_rule->ptr = value;
 	// always success when domain_rule is not NULL
 	domain_rule_get_data(domain_rule, &sub_rule_only, &root_rule_only);
 	if (sub_rule_only != root_rule_only) {

@@ -181,7 +181,12 @@ void *_new_dns_rule_ext(enum domain_rule domain_rule, int ext_size);
 void *_new_dns_rule(enum domain_rule domain_rule);
 void _dns_rule_put(struct dns_rule *rule);
 
-struct dns_domain_rule *domain_rule_new(uint8_t capacity);
+struct dns_domain_rule {
+	void *ptr;
+};
+
+// struct dns_domain_rule *domain_rule_new(uint8_t capacity);
+int domain_rule_init(struct dns_domain_rule *domain_rule);
 int domain_rule_free(struct dns_domain_rule *domain_rule);
 // ensures users can't directly modify `struct dns_domain_rule`
 int domain_rule_get_data(struct dns_domain_rule *domain_rule, int *sub_rule_only, int *root_rule_only);
